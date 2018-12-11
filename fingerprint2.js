@@ -22,213 +22,6 @@
 })('Fingerprint2', this, function () {
   'use strict'
 
-/// MurmurHash3 related functions
-
-//
-// Given two 64bit ints (as an array of two 32bit ints) returns the two
-// added together as a 64bit int (as an array of two 32bit ints).
-//
-  var x64Add = function (m, n) {
-    m = [m[0] >>> 16, m[0] & 0xffff, m[1] >>> 16, m[1] & 0xffff]
-    n = [n[0] >>> 16, n[0] & 0xffff, n[1] >>> 16, n[1] & 0xffff]
-    var o = [0, 0, 0, 0]
-    o[3] += m[3] + n[3]
-    o[2] += o[3] >>> 16
-    o[3] &= 0xffff
-    o[2] += m[2] + n[2]
-    o[1] += o[2] >>> 16
-    o[2] &= 0xffff
-    o[1] += m[1] + n[1]
-    o[0] += o[1] >>> 16
-    o[1] &= 0xffff
-    o[0] += m[0] + n[0]
-    o[0] &= 0xffff
-    return [(o[0] << 16) | o[1], (o[2] << 16) | o[3]]
-  }
-
-//
-// Given two 64bit ints (as an array of two 32bit ints) returns the two
-// multiplied together as a 64bit int (as an array of two 32bit ints).
-//
-  var x64Multiply = function (m, n) {
-    m = [m[0] >>> 16, m[0] & 0xffff, m[1] >>> 16, m[1] & 0xffff]
-    n = [n[0] >>> 16, n[0] & 0xffff, n[1] >>> 16, n[1] & 0xffff]
-    var o = [0, 0, 0, 0]
-    o[3] += m[3] * n[3]
-    o[2] += o[3] >>> 16
-    o[3] &= 0xffff
-    o[2] += m[2] * n[3]
-    o[1] += o[2] >>> 16
-    o[2] &= 0xffff
-    o[2] += m[3] * n[2]
-    o[1] += o[2] >>> 16
-    o[2] &= 0xffff
-    o[1] += m[1] * n[3]
-    o[0] += o[1] >>> 16
-    o[1] &= 0xffff
-    o[1] += m[2] * n[2]
-    o[0] += o[1] >>> 16
-    o[1] &= 0xffff
-    o[1] += m[3] * n[1]
-    o[0] += o[1] >>> 16
-    o[1] &= 0xffff
-    o[0] += (m[0] * n[3]) + (m[1] * n[2]) + (m[2] * n[1]) + (m[3] * n[0])
-    o[0] &= 0xffff
-    return [(o[0] << 16) | o[1], (o[2] << 16) | o[3]]
-  }
-//
-// Given a 64bit int (as an array of two 32bit ints) and an int
-// representing a number of bit positions, returns the 64bit int (as an
-// array of two 32bit ints) rotated left by that number of positions.
-//
-  var x64Rotl = function (m, n) {
-    n %= 64
-    if (n === 32) {
-      return [m[1], m[0]]
-    } else if (n < 32) {
-      return [(m[0] << n) | (m[1] >>> (32 - n)), (m[1] << n) | (m[0] >>> (32 - n))]
-    } else {
-      n -= 32
-      return [(m[1] << n) | (m[0] >>> (32 - n)), (m[0] << n) | (m[1] >>> (32 - n))]
-    }
-  }
-//
-// Given a 64bit int (as an array of two 32bit ints) and an int
-// representing a number of bit positions, returns the 64bit int (as an
-// array of two 32bit ints) shifted left by that number of positions.
-//
-  var x64LeftShift = function (m, n) {
-    n %= 64
-    if (n === 0) {
-      return m
-    } else if (n < 32) {
-      return [(m[0] << n) | (m[1] >>> (32 - n)), m[1] << n]
-    } else {
-      return [m[1] << (n - 32), 0]
-    }
-  }
-//
-// Given two 64bit ints (as an array of two 32bit ints) returns the two
-// xored together as a 64bit int (as an array of two 32bit ints).
-//
-  var x64Xor = function (m, n) {
-    return [m[0] ^ n[0], m[1] ^ n[1]]
-  }
-//
-// Given a block, returns murmurHash3's final x64 mix of that block.
-// (`[0, h[0] >>> 1]` is a 33 bit unsigned right shift. This is the
-// only place where we need to right shift 64bit ints.)
-//
-  var x64Fmix = function (h) {
-    h = x64Xor(h, [0, h[0] >>> 1])
-    h = x64Multiply(h, [0xff51afd7, 0xed558ccd])
-    h = x64Xor(h, [0, h[0] >>> 1])
-    h = x64Multiply(h, [0xc4ceb9fe, 0x1a85ec53])
-    h = x64Xor(h, [0, h[0] >>> 1])
-    return h
-  }
-
-//
-// Given a string and an optional seed as an int, returns a 128 bit
-// hash using the x64 flavor of MurmurHash3, as an unsigned hex.
-//
-  var x64hash128 = function (key, seed) {
-    key = key || ''
-    seed = seed || 0
-    var remainder = key.length % 16
-    var bytes = key.length - remainder
-    var h1 = [0, seed]
-    var h2 = [0, seed]
-    var k1 = [0, 0]
-    var k2 = [0, 0]
-    var c1 = [0x87c37b91, 0x114253d5]
-    var c2 = [0x4cf5ad43, 0x2745937f]
-    for (var i = 0; i < bytes; i = i + 16) {
-      k1 = [((key.charCodeAt(i + 4) & 0xff)) | ((key.charCodeAt(i + 5) & 0xff) << 8) | ((key.charCodeAt(i + 6) & 0xff) << 16) | ((key.charCodeAt(i + 7) & 0xff) << 24), ((key.charCodeAt(i) & 0xff)) | ((key.charCodeAt(i + 1) & 0xff) << 8) | ((key.charCodeAt(i + 2) & 0xff) << 16) | ((key.charCodeAt(i + 3) & 0xff) << 24)]
-      k2 = [((key.charCodeAt(i + 12) & 0xff)) | ((key.charCodeAt(i + 13) & 0xff) << 8) | ((key.charCodeAt(i + 14) & 0xff) << 16) | ((key.charCodeAt(i + 15) & 0xff) << 24), ((key.charCodeAt(i + 8) & 0xff)) | ((key.charCodeAt(i + 9) & 0xff) << 8) | ((key.charCodeAt(i + 10) & 0xff) << 16) | ((key.charCodeAt(i + 11) & 0xff) << 24)]
-      k1 = x64Multiply(k1, c1)
-      k1 = x64Rotl(k1, 31)
-      k1 = x64Multiply(k1, c2)
-      h1 = x64Xor(h1, k1)
-      h1 = x64Rotl(h1, 27)
-      h1 = x64Add(h1, h2)
-      h1 = x64Add(x64Multiply(h1, [0, 5]), [0, 0x52dce729])
-      k2 = x64Multiply(k2, c2)
-      k2 = x64Rotl(k2, 33)
-      k2 = x64Multiply(k2, c1)
-      h2 = x64Xor(h2, k2)
-      h2 = x64Rotl(h2, 31)
-      h2 = x64Add(h2, h1)
-      h2 = x64Add(x64Multiply(h2, [0, 5]), [0, 0x38495ab5])
-    }
-    k1 = [0, 0]
-    k2 = [0, 0]
-    switch (remainder) {
-      case 15:
-        k2 = x64Xor(k2, x64LeftShift([0, key.charCodeAt(i + 14)], 48))
-      // fallthrough
-      case 14:
-        k2 = x64Xor(k2, x64LeftShift([0, key.charCodeAt(i + 13)], 40))
-      // fallthrough
-      case 13:
-        k2 = x64Xor(k2, x64LeftShift([0, key.charCodeAt(i + 12)], 32))
-      // fallthrough
-      case 12:
-        k2 = x64Xor(k2, x64LeftShift([0, key.charCodeAt(i + 11)], 24))
-      // fallthrough
-      case 11:
-        k2 = x64Xor(k2, x64LeftShift([0, key.charCodeAt(i + 10)], 16))
-      // fallthrough
-      case 10:
-        k2 = x64Xor(k2, x64LeftShift([0, key.charCodeAt(i + 9)], 8))
-      // fallthrough
-      case 9:
-        k2 = x64Xor(k2, [0, key.charCodeAt(i + 8)])
-        k2 = x64Multiply(k2, c2)
-        k2 = x64Rotl(k2, 33)
-        k2 = x64Multiply(k2, c1)
-        h2 = x64Xor(h2, k2)
-      // fallthrough
-      case 8:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 7)], 56))
-      // fallthrough
-      case 7:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 6)], 48))
-      // fallthrough
-      case 6:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 5)], 40))
-      // fallthrough
-      case 5:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 4)], 32))
-      // fallthrough
-      case 4:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 3)], 24))
-      // fallthrough
-      case 3:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 2)], 16))
-      // fallthrough
-      case 2:
-        k1 = x64Xor(k1, x64LeftShift([0, key.charCodeAt(i + 1)], 8))
-      // fallthrough
-      case 1:
-        k1 = x64Xor(k1, [0, key.charCodeAt(i)])
-        k1 = x64Multiply(k1, c1)
-        k1 = x64Rotl(k1, 31)
-        k1 = x64Multiply(k1, c2)
-        h1 = x64Xor(h1, k1)
-      // fallthrough
-    }
-    h1 = x64Xor(h1, [0, key.length])
-    h2 = x64Xor(h2, [0, key.length])
-    h1 = x64Add(h1, h2)
-    h2 = x64Add(h2, h1)
-    h1 = x64Fmix(h1)
-    h2 = x64Fmix(h2)
-    h1 = x64Add(h1, h2)
-    h2 = x64Add(h2, h1)
-    return ('00000000' + (h1[0] >>> 0).toString(16)).slice(-8) + ('00000000' + (h1[1] >>> 0).toString(16)).slice(-8) + ('00000000' + (h2[0] >>> 0).toString(16)).slice(-8) + ('00000000' + (h2[1] >>> 0).toString(16)).slice(-8)
-  }
-
   var defaultOptions = {
     preprocessor: null,
     audio: {
@@ -239,8 +32,6 @@
       excludeIOS11: true
     },
     fonts: {
-      swfContainerId: 'fingerprintjs2',
-      swfPath: 'flash/compiled/FontList.swf',
       userDefinedFonts: [],
       extendedJsFonts: false
     },
@@ -263,9 +54,9 @@
       // uses js fonts already
       'fontsFlash': true
     },
-    NOT_AVAILABLE: 'not available',
-    ERROR: 'error',
-    EXCLUDED: 'excluded'
+    NOT_AVAILABLE: 'NA',
+    ERROR: 'ER',
+    EXCLUDED: 'EX'
   }
 
   var each = function (obj, iterator) {
@@ -311,87 +102,10 @@
     return target
   }
 
-// https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices
-  var enumerateDevicesKey = function (done, options) {
-    if (!isEnumerateDevicesSupported()) {
-      return done(options.NOT_AVAILABLE)
-    }
-    navigator.mediaDevices.enumerateDevices().then(function (devices) {
-      done(devices.map(function (device) {
-        return 'id=' + device.deviceId + ';gid=' + device.groupId + ';' + device.kind + ';' + device.label
-      }))
-    })
-      .catch(function (error) {
-        done(error)
-      })
-  }
-
   var isEnumerateDevicesSupported = function () {
     return (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)
   }
-// Inspired by and based on https://github.com/cozylife/audio-fingerprint
-  var audioKey = function (done, options) {
-    var audioOptions = options.audio
-    if (audioOptions.excludeIOS11 && navigator.userAgent.match(/OS 11.+Version\/11.+Safari/)) {
-        // See comment for excludeUserAgent and https://stackoverflow.com/questions/46363048/onaudioprocess-not-called-on-ios11#46534088
-      return done(options.EXCLUDED)
-    }
 
-    var AudioContext = window.OfflineAudioContext || window.webkitOfflineAudioContext
-
-    if (AudioContext == null) {
-      return done(options.NOT_AVAILABLE)
-    }
-
-    var context = new AudioContext(1, 44100, 44100)
-
-    var oscillator = context.createOscillator()
-    oscillator.type = 'triangle'
-    oscillator.frequency.setValueAtTime(10000, context.currentTime)
-
-    var compressor = context.createDynamicsCompressor()
-    each([
-        ['threshold', -50],
-        ['knee', 40],
-        ['ratio', 12],
-        ['reduction', -20],
-        ['attack', 0],
-        ['release', 0.25]
-    ], function (item) {
-      if (compressor[item[0]] !== undefined && typeof compressor[item[0]].setValueAtTime === 'function') {
-        compressor[item[0]].setValueAtTime(item[1], context.currentTime)
-      }
-    })
-
-    oscillator.connect(compressor)
-    compressor.connect(context.destination)
-    oscillator.start(0)
-    context.startRendering()
-
-    var audioTimeoutId = setTimeout(function () {
-      console.warn('Audio fingerprint timed out. Please report bug at https://github.com/Valve/fingerprintjs2 with your user agent: "' + navigator.userAgent + '".')
-      context.oncomplete = function () {}
-      context = null
-      return done('audioTimeout')
-    }, audioOptions.timeout)
-
-    context.oncomplete = function (event) {
-      var fingerprint
-      try {
-        clearTimeout(audioTimeoutId)
-        fingerprint = event.renderedBuffer.getChannelData(0)
-            .slice(4500, 5000)
-            .reduce(function (acc, val) { return acc + Math.abs(val) }, 0)
-            .toString()
-        oscillator.disconnect()
-        compressor.disconnect()
-      } catch (error) {
-        done(error)
-        return
-      }
-      done(fingerprint)
-    }
-  }
   var UserAgent = function (done) {
     done(navigator.userAgent)
   }
@@ -480,13 +194,6 @@
     }
     done(options.NOT_AVAILABLE)
   }
-  var webglVendorAndRendererKey = function (done) {
-    if (isWebGlSupported()) {
-      done(getWebglVendorAndRenderer())
-      return
-    }
-    done()
-  }
   var adBlockKey = function (done) {
     done(getAdBlock())
   }
@@ -502,22 +209,7 @@
   var hasLiedBrowserKey = function (done) {
     done(getHasLiedBrowser())
   }
-// flash fonts (will increase fingerprinting time 20X to ~ 130-150ms)
-  var flashFontsKey = function (done, options) {
-    // we do flash if swfobject is loaded
-    if (!hasSwfObjectLoaded()) {
-      return done('swf object not loaded')
-    }
-    if (!hasMinFlashInstalled()) {
-      return done('flash not installed')
-    }
-    if (!options.fonts.swfPath) {
-      return done('missing options.fonts.swfPath')
-    }
-    loadSwfAndDetectFonts(function (fonts) {
-      done(fonts)
-    }, options)
-  }
+
 // kudos to http://www.lalit.org/lab/javascript-css-font-detect/
   var jsFontsKey = function (done, options) {
       // a font will be compared against all the three default fonts.
@@ -889,8 +581,13 @@
     var result = []
       // Very simple now, need to make it more complex (geo shapes etc)
     var canvas = document.createElement('canvas')
-    canvas.width = 2000
-    canvas.height = 200
+    if (options.debug) {
+      document.body.appendChild(canvas)
+    }
+    var w = 380, h = 65
+
+    canvas.width = w
+    canvas.height = h
     canvas.style.display = 'inline'
     var ctx = canvas.getContext('2d')
       // detect browser support of canvas winding
@@ -898,51 +595,56 @@
       // https://github.com/Modernizr/Modernizr/blob/master/feature-detects/canvas/winding.js
     ctx.rect(0, 0, 10, 10)
     ctx.rect(2, 2, 6, 6)
-    result.push('canvas winding:' + ((ctx.isPointInPath(5, 5, 'evenodd') === false) ? 'yes' : 'no'))
+    result.push({'winding': ((ctx.isPointInPath(5, 5, 'evenodd') === false) ? 'yes' : 'no')})
 
-    ctx.textBaseline = 'alphabetic'
-    ctx.fillStyle = '#f60'
-    ctx.fillRect(125, 1, 62, 20)
-    ctx.fillStyle = '#069'
-      // https://github.com/Valve/fingerprintjs2/issues/66
-    if (options.dontUseFakeFontInCanvas) {
-      ctx.font = '11pt Arial'
-    } else {
-      ctx.font = '11pt no-real-font-123'
+    if (options.canvasfp) {
+      ctx.textBaseline = 'alphabetic'
+      ctx.fillStyle = '#f60'
+      ctx.fillRect(125, 1, 62, 20)
+      ctx.fillStyle = '#069'
+        // https://github.com/Valve/fingerprintjs2/issues/66
+      if (options.dontUseFakeFontInCanvas) {
+        ctx.font = '11pt Arial'
+      } else {
+        ctx.font = '11pt no-real-font-123'
+      }
+      ctx.fillText('Cwm fjordbank glyphs vext quiz, \ud83d\ude03', 2, 15)
+      ctx.fillStyle = 'rgba(102, 204, 0, 0.2)'
+      ctx.font = '18pt Arial'
+      ctx.fillText('Cwm fjordbank glyphs vext quiz, \ud83d\ude03', 4, 45)
+
+        // canvas blending
+        // http://blogs.adobe.com/webplatform/2013/01/28/blending-features-in-canvas/
+        // http://jsfiddle.net/NDYV8/16/
+      var baseSize = 20
+      ctx.globalCompositeOperation = 'multiply'
+      ctx.fillStyle = 'rgb(255,0,255)'
+      ctx.beginPath()
+      ctx.arc(baseSize, baseSize, baseSize, 0, Math.PI * 2, true)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = 'rgb(0,255,255)'
+      ctx.beginPath()
+      ctx.arc(baseSize * 2, baseSize, baseSize, 0, Math.PI * 2, true)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = 'rgb(255,255,0)'
+      ctx.beginPath()
+      ctx.arc(baseSize * 1.5, baseSize * 2, baseSize, 0, Math.PI * 2, true)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = 'rgb(255,0,255)'
+        // canvas winding
+        // http://blogs.adobe.com/webplatform/2013/01/30/winding-rules-in-canvas/
+        // http://jsfiddle.net/NDYV8/19/
+      ctx.arc(baseSize * 1.5, baseSize * 1.5, baseSize * 1.5, 0, Math.PI * 2, true)
+      ctx.arc(baseSize * 1.5, baseSize * 1.5, baseSize * 0.5, 0, Math.PI * 2, true)
+      ctx.fill('evenodd')
+
+      var imageData = ctx.getImageData(0, 0, w, h)
+      //todo: performance
+      result.push({'fp': Fingerprint2.x64hash128(JSON.stringify(imageData.data))})
     }
-    ctx.fillText('Cwm fjordbank glyphs vext quiz, \ud83d\ude03', 2, 15)
-    ctx.fillStyle = 'rgba(102, 204, 0, 0.2)'
-    ctx.font = '18pt Arial'
-    ctx.fillText('Cwm fjordbank glyphs vext quiz, \ud83d\ude03', 4, 45)
-
-      // canvas blending
-      // http://blogs.adobe.com/webplatform/2013/01/28/blending-features-in-canvas/
-      // http://jsfiddle.net/NDYV8/16/
-    ctx.globalCompositeOperation = 'multiply'
-    ctx.fillStyle = 'rgb(255,0,255)'
-    ctx.beginPath()
-    ctx.arc(50, 50, 50, 0, Math.PI * 2, true)
-    ctx.closePath()
-    ctx.fill()
-    ctx.fillStyle = 'rgb(0,255,255)'
-    ctx.beginPath()
-    ctx.arc(100, 50, 50, 0, Math.PI * 2, true)
-    ctx.closePath()
-    ctx.fill()
-    ctx.fillStyle = 'rgb(255,255,0)'
-    ctx.beginPath()
-    ctx.arc(75, 100, 50, 0, Math.PI * 2, true)
-    ctx.closePath()
-    ctx.fill()
-    ctx.fillStyle = 'rgb(255,0,255)'
-      // canvas winding
-      // http://blogs.adobe.com/webplatform/2013/01/30/winding-rules-in-canvas/
-      // http://jsfiddle.net/NDYV8/19/
-    ctx.arc(75, 75, 75, 0, Math.PI * 2, true)
-    ctx.arc(75, 75, 25, 0, Math.PI * 2, true)
-    ctx.fill('evenodd')
-
-    if (canvas.toDataURL) { result.push('canvas fp:' + canvas.toDataURL()) }
     return result
   }
   var getWebglFp = function () {
@@ -952,7 +654,7 @@
       gl.enable(gl.DEPTH_TEST)
       gl.depthFunc(gl.LEQUAL)
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-      return '[' + fa[0] + ', ' + fa[1] + ']'
+      return [fa[0], fa[1]]
     }
     var maxAnisotropy = function (gl) {
       var ext = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic') || gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
@@ -969,11 +671,22 @@
 
     gl = getWebglCanvas()
     if (!gl) { return null }
+
+
       // WebGL fingerprinting is a combination of techniques, found in MaxMind antifraud script & Augur fingerprinting.
       // First it draws a gradient object with shaders and convers the image to the Base64 string.
       // Then it enumerates all WebGL extensions & capabilities and appends them to the Base64 string, resulting in a huge WebGL string, potentially very unique on each device
       // Since iOS supports webgl starting from version 8.1 and 8.1 runs on several graphics chips, the results may be different across ios devices, but we need to verify it.
     var result = []
+
+    result.push({'max viewport dims': fa2s(gl.getParameter(gl.MAX_VIEWPORT_DIMS))})
+    result.push({'aliased line width range': fa2s(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE))})
+    result.push({'aliased point size range': fa2s(gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE))})
+
+    gl.clearColor(1.0, 1.0, 1.0, 1.0)
+    gl.disable(gl.DEPTH_TEST)
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
     var vShaderTemplate = 'attribute vec2 attrVertex;varying vec2 varyinTexCoordinate;uniform vec2 uniformOffset;void main(){varyinTexCoordinate=attrVertex+uniformOffset;gl_Position=vec4(attrVertex,0,1);}'
     var fShaderTemplate = 'precision mediump float;varying vec2 varyinTexCoordinate;void main() {gl_FragColor=vec4(varyinTexCoordinate,0,1);}'
     var vertexPosBuffer = gl.createBuffer()
@@ -999,44 +712,58 @@
     gl.vertexAttribPointer(program.vertexPosAttrib, vertexPosBuffer.itemSize, gl.FLOAT, !1, 0, 0)
     gl.uniform2f(program.offsetUniform, 1, 1)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexPosBuffer.numItems)
-    try {
-      result.push(gl.canvas.toDataURL())
-    } catch (e) {
-        /* .toDataURL may be absent or broken (blocked by extension) */
+
+    if (options.webglfp) {
+      var j = new Uint8Array(256*128*4)
+      gl.readPixels(0, 0, 256, 128, gl.RGBA, gl.UNSIGNED_BYTE, j)
+
+      // todo: performance
+
+      var te = JSON.stringify(j)
+
+      var i = te.replace(/,?"[0-9]+":/g, "")
+      if ("" == i.replace(/^{[0]+}$/g, "")) {
+        result.push({'fp onlyzeros': true});
+      } else {
+        result.push({'fp onlyzeros': false});
+      }
+
+      result.push({'fp': Fingerprint2.x64hash128(te)})
     }
-    result.push('extensions:' + (gl.getSupportedExtensions() || []).join(';'))
-    result.push('webgl aliased line width range:' + fa2s(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE)))
-    result.push('webgl aliased point size range:' + fa2s(gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)))
-    result.push('webgl alpha bits:' + gl.getParameter(gl.ALPHA_BITS))
-    result.push('webgl antialiasing:' + (gl.getContextAttributes().antialias ? 'yes' : 'no'))
-    result.push('webgl blue bits:' + gl.getParameter(gl.BLUE_BITS))
-    result.push('webgl depth bits:' + gl.getParameter(gl.DEPTH_BITS))
-    result.push('webgl green bits:' + gl.getParameter(gl.GREEN_BITS))
-    result.push('webgl max anisotropy:' + maxAnisotropy(gl))
-    result.push('webgl max combined texture image units:' + gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS))
-    result.push('webgl max cube map texture size:' + gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE))
-    result.push('webgl max fragment uniform vectors:' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS))
-    result.push('webgl max render buffer size:' + gl.getParameter(gl.MAX_RENDERBUFFER_SIZE))
-    result.push('webgl max texture image units:' + gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS))
-    result.push('webgl max texture size:' + gl.getParameter(gl.MAX_TEXTURE_SIZE))
-    result.push('webgl max varying vectors:' + gl.getParameter(gl.MAX_VARYING_VECTORS))
-    result.push('webgl max vertex attribs:' + gl.getParameter(gl.MAX_VERTEX_ATTRIBS))
-    result.push('webgl max vertex texture image units:' + gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS))
-    result.push('webgl max vertex uniform vectors:' + gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS))
-    result.push('webgl max viewport dims:' + fa2s(gl.getParameter(gl.MAX_VIEWPORT_DIMS)))
-    result.push('webgl red bits:' + gl.getParameter(gl.RED_BITS))
-    result.push('webgl renderer:' + gl.getParameter(gl.RENDERER))
-    result.push('webgl shading language version:' + gl.getParameter(gl.SHADING_LANGUAGE_VERSION))
-    result.push('webgl stencil bits:' + gl.getParameter(gl.STENCIL_BITS))
-    result.push('webgl vendor:' + gl.getParameter(gl.VENDOR))
-    result.push('webgl version:' + gl.getParameter(gl.VERSION))
+
+    result.push({'extensions': (gl.getSupportedExtensions() || [])})
+
+    result.push({'alpha bits': gl.getParameter(gl.ALPHA_BITS)})
+    result.push({'antialiasing': (gl.getContextAttributes().antialias ? 'yes' : 'no')})
+    result.push({'blue bits': gl.getParameter(gl.BLUE_BITS)})
+    result.push({'depth bits': gl.getParameter(gl.DEPTH_BITS)})
+    result.push({'green bits': gl.getParameter(gl.GREEN_BITS)})
+
+
+    result.push({'max anisotropy': maxAnisotropy(gl)})
+    result.push({'max combined texture image units': gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS)})
+    result.push({'max cube map texture size': gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE)})
+    result.push({'max fragment uniform vectors': gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)})
+    result.push({'max render buffer size': gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)})
+    result.push({'max texture image units': gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS)})
+    result.push({'max texture size': gl.getParameter(gl.MAX_TEXTURE_SIZE)})
+    result.push({'max varying vectors': gl.getParameter(gl.MAX_VARYING_VECTORS)})
+    result.push({'max vertex attribs': gl.getParameter(gl.MAX_VERTEX_ATTRIBS)})
+    result.push({'max vertex texture image units': gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS)})
+    result.push({'max vertex uniform vectors': gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS)})
+    result.push({'red bits': gl.getParameter(gl.RED_BITS)})
+    result.push({'renderer': gl.getParameter(gl.RENDERER)})
+    result.push({'shading language version': gl.getParameter(gl.SHADING_LANGUAGE_VERSION)})
+    result.push({'stencil bits': gl.getParameter(gl.STENCIL_BITS)})
+    result.push({'vendor': gl.getParameter(gl.VENDOR)})
+    result.push({'version': gl.getParameter(gl.VERSION)})
 
     try {
         // Add the unmasked vendor and unmasked renderer if the debug_renderer_info extension is available
       var extensionDebugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info')
       if (extensionDebugRendererInfo) {
-        result.push('webgl unmasked vendor:' + gl.getParameter(extensionDebugRendererInfo.UNMASKED_VENDOR_WEBGL))
-        result.push('webgl unmasked renderer:' + gl.getParameter(extensionDebugRendererInfo.UNMASKED_RENDERER_WEBGL))
+        result.push({'unmasked vendor': gl.getParameter(extensionDebugRendererInfo.UNMASKED_VENDOR_WEBGL)})
+        result.push({'unmasked renderer': gl.getParameter(extensionDebugRendererInfo.UNMASKED_RENDERER_WEBGL)})
       }
     } catch (e) { /* squelch */ }
 
@@ -1044,31 +771,27 @@
       return result
     }
 
+    var shaders = {};
+
     each(['FLOAT', 'INT'], function (numType) {
       each(['VERTEX', 'FRAGMENT'], function (shader) {
         each(['HIGH', 'MEDIUM', 'LOW'], function (numSize) {
-          each(['precision', 'rangeMin', 'rangeMax'], function (key) {
-            var format = gl.getShaderPrecisionFormat(gl[shader + '_SHADER'], gl[numSize + '_' + numType])[key]
-            if (key !== 'precision') {
-              key = 'precision ' + key
-            }
-            var line = ['webgl ', shader.toLowerCase(), ' shader ', numSize.toLowerCase(), ' ', numType.toLowerCase(), ' ', key, ':', format].join('')
-            result.push(line)
+          var k = shader[0] + numSize[0] + numType[0];
+          shaders[k] = map(['precision', 'rangeMin', 'rangeMax'], function (key) {
+            return gl.getShaderPrecisionFormat(gl[shader + '_SHADER'], gl[numSize + '_' + numType])[key]
           })
         })
       })
     })
-    return result
-  }
-  var getWebglVendorAndRenderer = function () {
-      /* This a subset of the WebGL fingerprint with a lot of entropy, while being reasonably browser-independent */
-    try {
-      var glContext = getWebglCanvas()
-      var extensionDebugRendererInfo = glContext.getExtension('WEBGL_debug_renderer_info')
-      return glContext.getParameter(extensionDebugRendererInfo.UNMASKED_VENDOR_WEBGL) + '~' + glContext.getParameter(extensionDebugRendererInfo.UNMASKED_RENDERER_WEBGL)
-    } catch (e) {
-      return null
+
+    result.push({'shaders': shaders})
+    var resultDict = {};
+    for (var i in result) {
+      for (var k in result[i]) {
+        resultDict[k] = result[i][k]
+      }
     }
+    return resultDict
   }
   var getAdBlock = function () {
     var ads = document.createElement('div')
@@ -1229,33 +952,20 @@
     }
     return false
   }
-  var hasSwfObjectLoaded = function () {
-    return typeof window.swfobject !== 'undefined'
-  }
-  var hasMinFlashInstalled = function () {
-    return window.swfobject.hasFlashPlayerVersion('9.0.0')
-  }
-  var addFlashDivNode = function (options) {
-    var node = document.createElement('div')
-    node.setAttribute('id', options.fonts.swfContainerId)
-    document.body.appendChild(node)
-  }
-  var loadSwfAndDetectFonts = function (done, options) {
-    var hiddenCallback = '___fp_swf_loaded'
-    window[hiddenCallback] = function (fonts) {
-      done(fonts)
-    }
-    var id = options.fonts.swfContainerId
-    addFlashDivNode()
-    var flashvars = { onReady: hiddenCallback }
-    var flashparams = { allowScriptAccess: 'always', menu: 'false' }
-    window.swfobject.embedSWF(options.fonts.swfPath, id, '1', '1', '9.0.0', false, flashvars, flashparams, {})
-  }
   var getWebglCanvas = function () {
-    var canvas = document.createElement('canvas')
+    if (!window.glcanvas) {
+      window.glcanvas = document.createElement('canvas')
+      var canvas = window.glcanvas
+      canvas.width = 256
+      canvas.height = 128
+      if (options.debug) {
+        document.body.appendChild(canvas)
+      }
+    }
+
     var gl = null
     try {
-      gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      gl = window.glcanvas.getContext('webgl') || window.glcanvas.getContext('experimental-webgl')
     } catch (e) { /* squelch */ }
     if (!gl) { gl = null }
     return gl
@@ -1283,21 +993,16 @@
     {key: 'plugins', getData: pluginsComponent},
     {key: 'canvas', getData: canvasKey},
     {key: 'webgl', getData: webglKey},
-    {key: 'webglVendorAndRenderer', getData: webglVendorAndRendererKey},
     {key: 'adBlock', getData: adBlockKey},
     {key: 'hasLiedLanguages', getData: hasLiedLanguagesKey},
     {key: 'hasLiedResolution', getData: hasLiedResolutionKey},
     {key: 'hasLiedOs', getData: hasLiedOsKey},
     {key: 'hasLiedBrowser', getData: hasLiedBrowserKey},
     {key: 'touchSupport', getData: touchSupportKey},
-    {key: 'fonts', getData: jsFontsKey, pauseBefore: true},
-    {key: 'fontsFlash', getData: flashFontsKey, pauseBefore: true},
-    {key: 'audio', getData: audioKey},
-    {key: 'enumerateDevices', getData: enumerateDevicesKey}
+    {key: 'fonts', getData: jsFontsKey, pauseBefore: true}
   ]
 
   var Fingerprint2 = function (options) {
-    throw new Error("'new Fingerprint()' is deprecated, see https://github.com/Valve/fingerprintjs2#upgrade-guide-from-182-to-200")
   }
 
   Fingerprint2.get = function (options, callback) {
@@ -1307,6 +1012,15 @@
     } else if (!options) {
       options = {}
     }
+
+    function callbackWrap(fpdata) {
+      var f = {}
+      for (var i in fpdata) {
+        f[fpdata[i].key] = fpdata[i].value
+      }
+      callback(f)
+    }
+
     extendSoft(options, defaultOptions)
     options.components = options.extraComponents.concat(components)
 
@@ -1324,7 +1038,7 @@
     var chainComponents = function (alreadyWaited) {
       i += 1
       if (i >= options.components.length) { // on finish
-        callback(keys.data)
+        callbackWrap(keys.data)
         return
       }
       var component = options.components[i]
@@ -1372,7 +1086,7 @@
       var newComponents = []
       for (var i = 0; i < components.length; i++) {
         var component = components[i]
-        if (component.value === (options.NOT_AVAILABLE || 'not available')) {
+        if ((component.value === options.NOT_AVAILABLE) || (component.value === 'not available')) {
           newComponents.push({key: component.key, value: 'unknown'})
         } else if (component.key === 'plugins') {
           newComponents.push({key: 'plugins',
@@ -1400,12 +1114,12 @@
           }
         }
       }
-      var murmur = x64hash128(map(newComponents, function (component) { return component.value }).join('~~~'), 31)
+      var murmur = Fingerprint2.x64hash128(map(newComponents, function (component) { return component.value }).join('~~~'), 31)
       callback(murmur, newComponents)
     })
   }
 
-  Fingerprint2.x64hash128 = x64hash128
+  Fingerprint2.x64hash128 = undefined
   Fingerprint2.VERSION = '2.0.0'
   return Fingerprint2
 })
